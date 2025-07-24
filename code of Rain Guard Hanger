@@ -1,0 +1,85 @@
+#define BLYNK_TEMPLATE_ID "TMPL30U-hMv4X"
+#define BLYNK_TEMPLATE_NAME "raingaurd"
+#define BLYNK_AUTH_TOKEN "7SZc3r_vL97i3sJzS_3i485TGytzxNEG" // Replace with your Blynk Auth Token
+
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <Servo.h>
+
+// Blynk Credentials
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "iPhone"; // Replace with your WiFi SSID
+char pass[] = "000000005";
+
+// Pin Definitions
+#define RAIN_SENSOR_DO 4 // D2 (GPIO4) - Digital Output
+#define RAIN_SENSOR_AO A0 // Analog Pin
+#define SERVO_PIN 2 // D4 (GPIO2) - Servo Signal Pin
+
+Servo myServo;
+bool rainDetected = false;
+bool motorManualControl = false;
+
+BLYNK_WRITE(V1) { // Virtual Pin V1 for Switch Control
+    motorManualControl = param.asInt(); // Get switch value (0 or 1)
+    
+    if (motorManualControl) {
+        myServo.write(180); // Full Rotation (Clockwise)
+        Serial.println("Motor running FULL speed via Blynk");
+    } else {
+        myServo.write(90); // Stop the motor
+        Serial.println("Motor STOPPED via Blynk");
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(RAIN_SENSOR_DO, INPUT);
+    
+    myServo.attach(SERVO_PIN); // Attach servo motor to pin
+    myServo.write(90); // Stop motor initially
+
+    // Connect to Blynk
+    Blynk.begin(auth, ssid, pass);
+    Serial.println("Rain Detection System with Blynk Initialized!");
+}
+
+void loop() {
+    Blynk.run(); // Run Blynk
+
+    int rainDigital = digitalRead(RAIN_SENSOR_DO);
+    int rainAnalog = analogRead(RAIN_SENSOR_AO);
+
+    // Send rain level to Blynk Gauge Widget (V0)
+    Blynk.virtualWrite(V0, rainAnalog);
+
+    Serial.print("Rain Analog Value: ");
+    Serial.print(rainAnalog);
+    Serial.print(" | Rain Digital State: ");
+    Serial.println(rainDigital);
+
+    // If rain is detected (Digital LOW or Analog below threshold)
+    if (rainDigital == LOW || rainAnalog < 500) {
+        if (!rainDetected) {
+            Serial.println("Rain detected! Sending notification...");
+            Blynk.logEvent("rain_alert", "Rain detected! Stay dry!");
+            rainDetected = true;
+
+            if (!motorManualControl) {
+                myServo.write(180); // Full Rotation (Clockwise)
+                Serial.println("Motor running FULL speed due to rain detection.");
+            }
+        }
+    } else {
+        Serial.println("No rain detected.");
+        rainDetected = false;
+
+        if (!motorManualControl) {
+            myServo.write(90); // Stop the motor
+            Serial.println("Motor STOPPED (No rain).");
+        }
+    }
+
+    delay(1000); // Adjust delay as needed
+}
